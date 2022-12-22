@@ -13,25 +13,34 @@ class CompareChainer
     public static function index()
     {
         if (strtolower(request()->getMethod()) == 'get') {
-            $destination = public_path('services' . DIRECTORY_SEPARATOR . 'database');
-
-            if (!file_exists($destination)) {
-                mkdir($destination, 0777, true);
-            }
-            File::copy(base_path('app/Services/Database/views/assets/bootstrap.min.css'), $destination . '/bootstrap.min.css');
-            File::copy(base_path('app/Services/Database/views/assets/bootstrap.min.js'), $destination . '/bootstrap.min.js');
-            File::copy(base_path('app/Services/Database/views/assets/jquery.min.js'), $destination . '/jquery.min.js');
-
-            view()->addNamespace('Comparer', base_path('app/Services/Database/views'));
+//            dd(556565);
+            self::publish();
             return view('Comparer::index');
         }
-        $source = request('source');
-        $current = request('current');
         try {
-            return self::compare($source, $current)->compareResults;
+            return self::compare(request('source'), request('current'))->compareResults;
         } catch (\Exception $e) {
-            return $e->getMessage() . ' on line: ' . $e->getLine() . ' in file: ' . $e->getFile() . ' with code: ' . $e->getCode()  ;
+            return self::error($e);
         }
+    }
+
+    public static function error($e) :string
+    {
+        return $e->getMessage() . ' on line: ' . $e->getLine() . ' in file: ' . $e->getFile() . ' with code: ' . $e->getCode();
+    }
+
+    public static function publish() :void
+    {
+        $destination = public_path('services' . DIRECTORY_SEPARATOR . 'database');
+        if (!file_exists($destination)) {
+            mkdir($destination, 0777, true);
+        }
+        File::copy(base_path('app/Services/Database/views/assets/bootstrap.min.css'), $destination . '/bootstrap.min.css');
+        File::copy(base_path('app/Services/Database/views/assets/bootstrap.min.js'), $destination . '/bootstrap.min.js');
+        File::copy(base_path('app/Services/Database/views/assets/jquery.min.js'), $destination . '/jquery.min.js');
+        File::copy(base_path('app/Services/Database/views/assets/clipboard.min.js'), $destination . '/clipboard.min.js');
+
+        view()->addNamespace('Comparer', base_path('app/Services/Database/views'));
     }
 
     public static function take($data)

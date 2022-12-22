@@ -22,29 +22,25 @@
 <input id="cpy-me" type="hidden">
 
 <script src="{{ asset('services/database/jquery.min.js') }}"></script>
+<script src="{{ asset('services/database/clipboard.min.js') }}"></script>
 
 <script>
 
-    $(document).on('click', '.cpy', function(){
-        var id = $(this).data('id');
-        copyToClipboard(id)
+    var clipboard = new ClipboardJS('.cpy');
+
+    clipboard.on('success', function(e) {
+        console.info('Action:', e.action);
+        console.info('Text:', e.text);
+        console.info('Trigger:', e.trigger);
+
+        e.clearSelection();
     });
-    $('.cpy').hide();
 
-    function copyToClipboard(id) {
-        return false;
-        var $temp = $("#cpy-me");
-        var temp = document.getElementById('cpy-me');
-        var toCpy = document.getElementById('q-' + id).innerHTML
-        temp.value = toCpy;
+    clipboard.on('error', function(e) {
+        console.error('Action:', e.action);
+        console.error('Trigger:', e.trigger);
+    });
 
-        temp.select();
-        document.execCommand("copy");
-        // navigator.clipboard.writeText(toCpy);
-
-        alert('copied!')
-        return false;
-    }
 
 
 </script>

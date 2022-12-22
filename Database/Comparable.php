@@ -2,8 +2,6 @@
 
 namespace App\Services\Database;
 
-use Illuminate\Support\Facades\Config;
-
 class Comparable{
 
     // todo
@@ -22,9 +20,9 @@ class Comparable{
     public function listTables()
     {
         $data = $this->compareResults;
-
         return new static(CompareChainer::listTables($data));
     }
+
     public function compare()
     {
         $data = $this->compareResults;
