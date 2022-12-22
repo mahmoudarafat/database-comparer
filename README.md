@@ -11,11 +11,11 @@
 1. Add the Database folder to yoour laravel project in
 'App/Services'
 2. Create this route with exact http type and content
-'' 
+``` php
 Route::match(['get', 'post'], 'compare-database', function () {
     return App\Services\Database\CompareChainer::index();
 });
-'' 
+```
 3. Goto the url 
 4. Type in the database connections
 5. Compare and see the results 
