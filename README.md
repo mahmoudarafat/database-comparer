@@ -9,7 +9,7 @@
 
 ## how to use
 1. Add the Database folder to yoour laravel project in
-'App/Services'
+'app/Services' folder
 2. Create this route with exact http type and content
 ``` php
 Route::match(['get', 'post'], 'compare-database', function () {
