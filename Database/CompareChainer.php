@@ -13,7 +13,6 @@ class CompareChainer
     public static function index()
     {
         if (strtolower(request()->getMethod()) == 'get') {
-//            dd(556565);
             self::publish();
             return view('Comparer::index');
         }
@@ -66,6 +65,7 @@ class CompareChainer
     {
         $connection = $data['source'];
         $source = self::fetchTables($connection, 'source');
+
         $arr[] = $source;
         $connection = $data['current'];
         $current = self::fetchTables($connection, 'current');
@@ -76,6 +76,7 @@ class CompareChainer
 
     public static function listTablesData($data)
     {
+
         $sourceDB = $data->source;
         $currentDB = $data->current;
         $sourceTables = $data->source_tables;
@@ -139,7 +140,11 @@ class CompareChainer
             'reverseUpdate' => $reverseUpdateQuery,
         ];
         view()->addNamespace('Comparer', base_path('app/Services/Database/views'));
-        $view = view('Comparer::result', compact('query'))->render();
+        $db = [
+            'source' => request('source')['db'],
+            'current' => request('current')['db']
+        ];
+        $view = view('Comparer::result', compact('query', 'db'))->render();
         /*********************************** OR *****************************************/
         // view()->addLocation(base_path('app/Services/Database/views'));
         // $view = view('result', compact('query'))->render();
@@ -159,7 +164,9 @@ class CompareChainer
                 $data[$type . '_tables'][] = collect(array_values((array)$table))->first();
             }
         }
-
+        if(sizeof($data) == 0){
+            $data[$type . '_tables'] = [];
+        }
         return (object)$data;
     }
 
@@ -169,7 +176,7 @@ class CompareChainer
         self::setConnection($connection);
         if (isset($tables)) {
             foreach ($tables as $table) {
-                $columns = \DB::select('DESC ' . $table);
+                $columns = \DB::select('DESC  `' . $table .'`' );
                 $result[$table][] = $columns;
             }
         }
@@ -194,7 +201,6 @@ class CompareChainer
 
     public static function getDifferences($resource, $compared, $data)
     {
-
         self::setConnection($data['source']);
         $sourceTableNames = \DB::getDoctrineSchemaManager()->listTableNames(); // source tables
         self::setConnection($data['current']);

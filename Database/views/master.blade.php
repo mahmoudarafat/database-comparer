@@ -41,6 +41,18 @@
         console.error('Trigger:', e.trigger);
     });
 
+    $(document).on('click', '#do-compare', function () {
+        var This = $(this);
+
+        if (This.attr('disabled') == 'disabled') {
+            return false;
+        }
+        This.attr('disabled', 'disabled');
+        This.html('Loading....');
+        $('#form-compare').submit();
+
+        return false;
+    })
 
 
 </script>

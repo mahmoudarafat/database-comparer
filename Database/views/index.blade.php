@@ -7,7 +7,7 @@
     <div class="text-center">
         <h1 class="text-primary pager" style="margin-top:50px;">Database Comparator</h1>
         <hr>
-        <form method="post" action="{{ request()->url() }}">
+        <form id="form-compare" method="post" action="{{ request()->url() }}">
             {{ csrf_field() }}
             <table class="table table-bordered">
                 <thead>
@@ -58,8 +58,10 @@
 
                 </tbody>
             </table>
-            <button class="btn btn-primary">Compare</button>
         </form>
+
+        <a href="javascript:void(0)" id="do-compare" class="btn btn-primary" >Compare</a>
+
     </div>
 
 @endsection
