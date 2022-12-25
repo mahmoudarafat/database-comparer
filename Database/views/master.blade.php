@@ -2,7 +2,17 @@
 <head>
     <meta charset="UTF-8">
     <title>Database Comparator</title>
-    <link href="{{ asset('services/database/bootstrap.min.css') }}" rel="stylesheet">
+    <?php
+        $base_assets = asset('/');
+//        dd($base_assets);
+        if(strpos($base_assets, 'public') == false){
+//            dd('hello');
+            $base_assets .= 'public/';
+        }
+//        dd('welcome');
+
+    ?>
+    <link href="{{ $base_assets . 'services/database/bootstrap.min.css' }}" rel="stylesheet">
 
     <style>
         .card {
@@ -21,8 +31,8 @@
 </div>
 <input id="cpy-me" type="hidden">
 
-<script src="{{ asset('services/database/jquery.min.js') }}"></script>
-<script src="{{ asset('services/database/clipboard.min.js') }}"></script>
+<script src="{{ $base_assets . 'services/database/jquery.min.js' }}"></script>
+<script src="{{ $base_assets . 'services/database/clipboard.min.js' }}"></script>
 
 <script>
 
@@ -34,6 +44,7 @@
         console.info('Trigger:', e.trigger);
 
         e.clearSelection();
+        alert('Copied!');
     });
 
     clipboard.on('error', function(e) {

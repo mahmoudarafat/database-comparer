@@ -7,8 +7,8 @@ use Illuminate\Support\Facades\File;
 
 class CompareChainer
 {
-    public array $current;
-    public array $source;
+    public $current;
+    public $source;
 
     public static function index()
     {
@@ -23,12 +23,12 @@ class CompareChainer
         }
     }
 
-    public static function error($e) :string
+    public static function error($e): string
     {
         return $e->getMessage() . ' on line: ' . $e->getLine() . ' in file: ' . $e->getFile() . ' with code: ' . $e->getCode();
     }
 
-    public static function publish() :void
+    public static function publish(): void
     {
         $destination = public_path('services' . DIRECTORY_SEPARATOR . 'database');
         if (!file_exists($destination)) {
@@ -97,6 +97,7 @@ class CompareChainer
         $current = (array)$data['current_tables'];
 
         $differences = self::getDifferences($source, $current, $data);
+
         /*
         return [
             'source' => $sourceTableNames, // table names of source
@@ -105,10 +106,12 @@ class CompareChainer
             'reverse' => $reverseTables, // new tables to store in source
             'updateColumns' => $newColumns, // tables need update in current
             'checkedColumns' => $checkColumns, // table need update in source
+            'changedColumns' => $changedColumns, // table need update their data types
         ];
         */
         $currentUpdateQuery = $currentCreateQuery = ''; // queries for current DB;
         $reverseUpdateQuery = $reverseCreateQuery = ''; // queries for  source DB;
+        $updateSourceQuery = $updateCurrentQuery = ''; // queries for dismatched Datatypes;
 
         if (sizeof($differences['create'])) {
             $currentCreateQuery .= "START TRANSACTION;SET sql_mode = '';";
@@ -126,10 +129,32 @@ class CompareChainer
             $currentUpdateQuery .= "COMMIT;";
 
         }
+
         if (sizeof($differences['checkedColumns'])) {
             $reverseUpdateQuery .= "START TRANSACTION;SET sql_mode = '';";
             $reverseUpdateQuery .= self::updateTables($differences['checkedColumns']);
             $reverseUpdateQuery .= "COMMIT;";
+        }
+
+        $misSource = false;
+        $misCurrent = false;
+        if (sizeof($differences['changedColumns'])) {
+
+            $misMatch = self::updateDataTypes($differences['changedColumns']);
+            $inSource = $misMatch['source'];
+            $inCurrent = $misMatch['current'];
+            if (strlen($inSource)) {
+                $misSource = true;
+                $updateSourceQuery .= "START TRANSACTION;SET sql_mode = '';";
+                $updateSourceQuery .= $inSource;
+                $updateSourceQuery .= "COMMIT;";
+            }
+            if (strlen($inCurrent)) {
+                $misCurrent = true;
+                $updateCurrentQuery .= "START TRANSACTION;SET sql_mode = '';";
+                $updateCurrentQuery .= $inCurrent;
+                $updateCurrentQuery .= "COMMIT;";
+            }
         }
 
         self::setConnection([], (array)$data['default_conn']);
@@ -138,13 +163,19 @@ class CompareChainer
             'currentUpdate' => $currentUpdateQuery,
             'reverseCreate' => $reverseCreateQuery,
             'reverseUpdate' => $reverseUpdateQuery,
+            'misCurrent' => $misCurrent,
+            'misSource' => $misSource,
+            'updateSource' => $updateSourceQuery,
+            'updateCurrent' => $updateCurrentQuery,
         ];
+
         view()->addNamespace('Comparer', base_path('app/Services/Database/views'));
         $db = [
             'source' => request('source')['db'],
             'current' => request('current')['db']
         ];
-        $view = view('Comparer::result', compact('query', 'db'))->render();
+        $changedColumns = $differences['changedColumns'];
+        $view = view('Comparer::result', compact('query', 'db', 'changedColumns'))->render();
         /*********************************** OR *****************************************/
         // view()->addLocation(base_path('app/Services/Database/views'));
         // $view = view('result', compact('query'))->render();
@@ -152,6 +183,33 @@ class CompareChainer
         self::clear();
         return $view;
     }
+
+    public static function getChangesInColumns($table, $columnsData)
+    {
+        $querySource = '';
+        $queryCurrent = '';
+        foreach ($columnsData as $col){
+            $columnSource = self::prepareColumnData($col['source']);
+            $columnCurrent = self::prepareColumnData($col['current']);
+            $querySource .= 'ALTER TABLE `'. $table .'` CHANGE `'. $columnSource->field .'` `'. $columnCurrent->field .'` '. $columnCurrent->type . ' '. $columnCurrent->nullString . ';';
+            $queryCurrent .= 'ALTER TABLE `'. $table .'` CHANGE `'. $columnSource->field .'` `'. $columnSource->field .'` '. $columnSource->type . ' '. $columnSource->nullString . ';';
+        }
+        return ['source' => $querySource, 'current' => $queryCurrent];
+    }
+    public static function updateDataTypes($tables)
+    {
+        $source = '';
+        $current = '';
+
+        foreach ($tables as $table => $columnsData){
+            $queries = self::getChangesInColumns($table, $columnsData);
+            $source .= $queries['source'];
+            $current .= $queries['current'];
+        }
+        $results = ['source' => $source, 'current' => $current];
+        return $results;
+    }
+
 
     public static function fetchTables($connection, $type): object
     {
@@ -164,7 +222,7 @@ class CompareChainer
                 $data[$type . '_tables'][] = collect(array_values((array)$table))->first();
             }
         }
-        if(sizeof($data) == 0){
+        if (sizeof($data) == 0) {
             $data[$type . '_tables'] = [];
         }
         return (object)$data;
@@ -176,7 +234,7 @@ class CompareChainer
         self::setConnection($connection);
         if (isset($tables)) {
             foreach ($tables as $table) {
-                $columns = \DB::select('DESC  `' . $table .'`' );
+                $columns = \DB::select('DESC  `' . $table . '`');
                 $result[$table][] = $columns;
             }
         }
@@ -202,9 +260,13 @@ class CompareChainer
     public static function getDifferences($resource, $compared, $data)
     {
         self::setConnection($data['source']);
-        $sourceTableNames = \DB::getDoctrineSchemaManager()->listTableNames(); // source tables
+
+        // $sourceTableNames = \DB::getDoctrineSchemaManager()->listTableNames(); // source tables
+        $sourceTableNames = array_keys($data['source_tables']); // source tables
+
         self::setConnection($data['current']);
-        $currentTableNames = \DB::getDoctrineSchemaManager()->listTableNames(); // current tables
+        // $currentTableNames = \DB::getDoctrineSchemaManager()->listTableNames(); // current tables
+        $currentTableNames = array_keys($data['current_tables']); // current tables
 
         $forCreate = array_diff($sourceTableNames, $currentTableNames); // tables in source but not in new
         $forCheck = array_diff($currentTableNames, $sourceTableNames); // tables in new but not in source
@@ -216,6 +278,8 @@ class CompareChainer
         $createdTables = self::getRequiredColumns($data, $createdTables, 'source');
         $newColumns = self::getRequiredColumns($data, $update, 'source');
         $checkColumns = self::getRequiredColumns($data, $update, 'current');
+        $changedColumns = self::getDisMatchedColumns($data, $update);
+
         $reverseTables = self::getReverseTables($data, $forCheck);
 
         return [
@@ -225,6 +289,7 @@ class CompareChainer
             'reverse' => $reverseTables, // new tables to store in source
             'updateColumns' => $newColumns, // tables need update in current
             'checkedColumns' => $checkColumns, // table need update in source
+            'changedColumns' => $changedColumns, // table need update in source
         ];
     }
 
@@ -239,13 +304,57 @@ class CompareChainer
         return $result;
     }
 
-    public static function getRequiredColumns($data, $update, $type)
+    public static function getDisMatchedColumns($data, $update, $type = 'source')
     {
         $reverse = ($type == 'source') ? 'current' : 'source';
 
         $Columns = [];
 
-        $matches = [];
+        if (isset($update[$type])) {
+            foreach ($update['source'] as $table => $dataTable) {
+                $currentDatatable = $update[$reverse][$table] ?? [];
+
+                if ($reverse == 'source') {
+                    $first = $dataTable;
+                    $second = $currentDatatable[0];
+                } else {
+                    $first = $dataTable[0];
+                    $second = $currentDatatable;
+                }
+                $match = array_intersect($first, $second);
+
+                if (sizeof($match)) {
+                    // todo
+                    /*  @add_queries-for-dismatch-data-types */
+
+                    $tableColumns = $data[$type . '_tables'][$table];
+                    $tableColumns = collect($tableColumns)->first();
+                    $tableColumns = collect($tableColumns)->keyBy('Field');
+
+                    $reverseColumns = $data[$reverse . '_tables'][$table];
+                    $reverseColumns = collect($reverseColumns)->first();
+                    $reverseColumns = collect($reverseColumns)->keyBy('Field');
+
+                    foreach ($tableColumns as $column => $dataColumn) {
+                        if (
+                            $reverseColumns->has($column) && $dataColumn->Type != optional($reverseColumns->get($column))->Type) {
+                            $Columns[$table][$column] = [
+                                'source' => $dataColumn,
+                                'current' => $reverseColumns->get($column)
+                            ];
+                        }
+                    }
+                }
+            }
+        }
+        return $Columns;
+    }
+
+    public static function getRequiredColumns($data, $update, $type)
+    {
+        $reverse = ($type == 'source') ? 'current' : 'source';
+
+        $Columns = [];
 
         if (isset($update[$type])) {
             foreach ($update[$type] as $table => $dataTable) {
@@ -259,7 +368,7 @@ class CompareChainer
                     $first = $dataTable[0];
                     $second = $currentDatatable;
                 }
-                $match = array_intersect($first, $second);
+
                 $diff = array_diff($first, $second);
 
                 if (sizeof($diff)) {
@@ -272,19 +381,7 @@ class CompareChainer
                         $Columns[$table][] = self::getColumnData($column, $table, $data, $type);
                     }
                 }
-                if (sizeof($match)) {
-                    // todo
-                    /*  @add_queries-for-dismatch-data-types */
-                    /////////////
-                    // dd($table, $match);
-                    /*foreach ($match as $columnJ) {
-                        $tableColumns = $data[$type . '_tables'][$table];
-                        $tableColumns = collect($tableColumns)->first();
-                        $tableColumns = collect($tableColumns)->keyBy('Field');
-                        $column = self::prepareColumnData($tableColumns->get($columnJ));
-                        $Columns[$table][] = self::getColumnData($column, $table, $data, $type);
-                    }*/
-                }
+
             }
         }
         return $Columns;
