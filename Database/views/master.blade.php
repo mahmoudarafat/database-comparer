@@ -4,13 +4,6 @@
     <title>Database Comparator</title>
     <?php
         $base_assets = asset('/');
-//        dd($base_assets);
-        if(strpos($base_assets, 'public') == false){
-//            dd('hello');
-            $base_assets .= 'public/';
-        }
-//        dd('welcome');
-
     ?>
     <link href="{{ $base_assets . 'services/database/bootstrap.min.css' }}" rel="stylesheet">
 

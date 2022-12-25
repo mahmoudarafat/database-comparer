@@ -30,6 +30,7 @@ class CompareChainer
 
     public static function publish(): void
     {
+        /********************** FOR Public Root { /public } ***************************/
         $destination = public_path('services' . DIRECTORY_SEPARATOR . 'database');
         if (!file_exists($destination)) {
             mkdir($destination, 0777, true);
@@ -38,7 +39,16 @@ class CompareChainer
         File::copy(base_path('app/Services/Database/views/assets/bootstrap.min.js'), $destination . '/bootstrap.min.js');
         File::copy(base_path('app/Services/Database/views/assets/jquery.min.js'), $destination . '/jquery.min.js');
         File::copy(base_path('app/Services/Database/views/assets/clipboard.min.js'), $destination . '/clipboard.min.js');
-
+        /************************* FOR Basic Root { / } ********************************/
+        $destination2 = base_path('services' . DIRECTORY_SEPARATOR . 'database');
+        if (!file_exists($destination2)) {
+            mkdir($destination2, 0777, true);
+        }
+        File::copy(base_path('app/Services/Database/views/assets/bootstrap.min.css'), $destination2 . '/bootstrap.min.css');
+        File::copy(base_path('app/Services/Database/views/assets/bootstrap.min.js'), $destination2 . '/bootstrap.min.js');
+        File::copy(base_path('app/Services/Database/views/assets/jquery.min.js'), $destination2 . '/jquery.min.js');
+        File::copy(base_path('app/Services/Database/views/assets/clipboard.min.js'), $destination2 . '/clipboard.min.js');
+        /********************************************************************************/
         view()->addNamespace('Comparer', base_path('app/Services/Database/views'));
     }
 
