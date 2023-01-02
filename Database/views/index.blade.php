@@ -16,41 +16,49 @@
                 </thead>
                 <tbody>
                 <tr>
+                    @foreach(['source', 'current'] as $item)
                     <td>
                         <ul class="list-unstyled">
                             <li>
-                                <label>Host: </label><input required name="source[host]" class="form-control" value="127.0.0.1" />
+                                <label>Host: </label><input required name="{{ $item }}[host]" class="form-control" value="127.0.0.1" />
                             </li>
                             <li>
-                                <label>PORT: </label><input required name="source[port]" class="form-control" value="3306" />
+                                <label>PORT: </label><input required name="{{ $item }}[port]" class="form-control" value="3306" />
                             </li>
                             <li>
-                                <label>Database: </label><input required name="source[db]" class="form-control" value="" />
+                                <label>Database: </label><input required name="{{ $item }}[db]" class="form-control" value="" />
                             </li>
                             <li>
-                                <label>Username: </label><input required name="source[user]" class="form-control" value="root" />
+                                <label>Username: </label><input required name="{{ $item }}[user]" class="form-control" value="root" />
                             </li>
                             <li>
-                                <label>Password: </label><input name="source[pass]" class="form-control" value="" />
+                                <label>Password: </label><input name="{{ $item }}[pass]" class="form-control" value="" />
+                            </li>
+                            <li class="row" style="margin-top: 10px;">
+                                <label for="{{ $item }}-auto" class="col-sm-6">Auto Update Tables:</label>
+                                <input  type="checkbox" id="{{ $item}}-auto" name="{{ $item }}[auto-update]" class="checkbox col-sm-2" value="1" />
                             </li>
                         </ul>
                     </td>
-                    <td>
-                        <ul class="list-unstyled">
-                            <li>
-                                <label>Host: </label><input required name="current[host]" class="form-control" value="127.0.0.1" />
+                    @endforeach
+                </tr>
+
+                <tr>
+                    <td colspan="3" id="radios">
+                        <h6 class="text-danger">Works only if auto update is Enabled!</h6>
+                        <ul class="list-unstyled" style="display: flex">
+                            <li style="padding-right: 30px;"><b>Data Types:</b></li>
+                            <li style="display: contents;" id="no-datatype-update-div">
+                                <label for="no-datatype-update" class="col-sm-3">Don't Update:
+                                <input  type="radio" id="no-datatype-update" name="datatype-update" checked value="no" /></label>
                             </li>
-                            <li>
-                                <label>PORT: </label><input required name="current[port]" class="form-control" value="3306" />
+                            <li style="    display: contents;" id="source-datatype-update-div">
+                                <label for="source-datatype-update" class="col-sm-3">Update Source:
+                                    <input  type="radio" id="source-datatype-update" name="datatype-update" value="source" /></label>
                             </li>
-                            <li>
-                                <label>Database: </label><input required name="current[db]" class="form-control" value="" />
-                            </li>
-                            <li>
-                                <label>Username: </label><input required name="current[user]" class="form-control" value="root" />
-                            </li>
-                            <li>
-                                <label>Password: </label><input name="current[pass]" class="form-control" value="" />
+                            <li style="    display: contents;" id="current-datatype-update-div">
+                                <label for="current-datatype-update" class="col-sm-3">Update Current:
+                                    <input  type="radio" id="current-datatype-update" name="datatype-update" value="current" /></label>
                             </li>
                         </ul>
                     </td>

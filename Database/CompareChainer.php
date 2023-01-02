@@ -12,9 +12,11 @@ class CompareChainer
 
     public static function index()
     {
+        $autoupdate = false;
+//        dd(request()->all());
         if (strtolower(request()->getMethod()) == 'get') {
             self::publish();
-            return view('Comparer::index');
+            return view('Comparer::index', compact('autoupdate'));
         }
         try {
             return self::compare(request('source'), request('current'))->compareResults;
@@ -185,7 +187,18 @@ class CompareChainer
             'current' => request('current')['db']
         ];
         $changedColumns = $differences['changedColumns'];
-        $view = view('Comparer::result', compact('query', 'db', 'changedColumns'))->render();
+
+        self::autoUpdate($data, $query);
+
+        $sourceDB = request('source');
+        $currentDB = request('current');
+
+        $autoupdate = false;
+        if (array_key_exists('auto-update', $data['current']) || array_key_exists('auto-update', $data['source'])) {
+            $autoupdate = true;
+        }
+
+        $view = view('Comparer::result', compact('query', 'db', 'changedColumns', 'sourceDB', 'currentDB', 'autoupdate'))->render();
         /*********************************** OR *****************************************/
         // view()->addLocation(base_path('app/Services/Database/views'));
         // $view = view('result', compact('query'))->render();
@@ -194,24 +207,73 @@ class CompareChainer
         return $view;
     }
 
+    public static function autoUpdate($data, $query)
+    {
+        $sourceQueries =
+            [
+                $query['reverseCreate'],
+                $query['reverseUpdate'],
+            ];
+
+        $sourceQueries = implode(' ', $sourceQueries);
+
+        $currentQueries =
+            [
+                $query['currentCreate'],
+                $query['currentUpdate'],
+            ];
+        $currentQueries = implode(' ', $currentQueries);
+
+        if (array_key_exists('auto-update', $data['source'])) {
+            self::setConnection($data['source']);
+            if(in_array(request('datatype-update'), ['source', 'current'] ) && request('datatype-update') == 'source'){
+                $sourceQueries .= $query['updateSource'];
+            }
+            $sourceQueries = trim(rtrim($sourceQueries));
+            if(strlen($sourceQueries)){
+                \DB::unprepared($sourceQueries);
+            }
+        }
+        if (array_key_exists('auto-update', $data['current'])) {
+            self::setConnection($data['current']);
+            if(in_array(request('datatype-update'), ['source', 'current'] ) && request('datatype-update') == 'current'){
+                $currentQueries .= $query['updateCurrent'];
+            }
+            $currentQueries = trim(rtrim($currentQueries));
+            if(strlen($currentQueries)){
+                \DB::unprepared($currentQueries);
+            }
+        }
+    }
+
+    public static function applyUpdates()
+    {
+        $connection = request('db');
+        self::setConnection($connection);
+        $query = trim(rtrim(str_replace('<br>', '', request('content'))));
+        \DB::unprepared($query);
+        return ['status' => true, 'msg' => 'Applied'];
+    }
+
     public static function getChangesInColumns($table, $columnsData)
     {
         $querySource = '';
         $queryCurrent = '';
-        foreach ($columnsData as $col){
+        foreach ($columnsData as $col) {
             $columnSource = self::prepareColumnData($col['source']);
             $columnCurrent = self::prepareColumnData($col['current']);
-            $querySource .= 'ALTER TABLE `'. $table .'` CHANGE `'. $columnSource->field .'` `'. $columnCurrent->field .'` '. $columnCurrent->type . ' '. $columnCurrent->nullString . ';';
-            $queryCurrent .= 'ALTER TABLE `'. $table .'` CHANGE `'. $columnSource->field .'` `'. $columnSource->field .'` '. $columnSource->type . ' '. $columnSource->nullString . ';';
+            $querySource .= 'ALTER TABLE `' . $table . '` CHANGE `' . $columnSource->field . '` `' . $columnCurrent->field . '` ' . $columnCurrent->type . ' ' . $columnCurrent->nullString . ';';
+            $queryCurrent .= 'ALTER TABLE `' . $table . '` CHANGE `' . $columnSource->field . '` `' . $columnSource->field . '` ' . $columnSource->type . ' ' . $columnSource->nullString . ';';
         }
         return ['source' => $querySource, 'current' => $queryCurrent];
     }
+
     public static function updateDataTypes($tables)
     {
         $source = '';
         $current = '';
 
-        foreach ($tables as $table => $columnsData){
+        foreach ($tables as $table => $columnsData) {
             $queries = self::getChangesInColumns($table, $columnsData);
             $source .= $queries['source'];
             $current .= $queries['current'];

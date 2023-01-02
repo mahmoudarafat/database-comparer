@@ -1,6 +1,11 @@
 @extends('Comparer::master')
 
 @section('content')
+
+    <?php
+        $source = json_encode($sourceDB);
+        $current = json_encode($currentDB);
+    ?>
     <div class="text-center">
         <h1 class="text-primary pager" style="margin-top:50px;">Compare Results</h1>
     </div>
@@ -13,6 +18,7 @@
                     class="btn btn-info h5 cpy" data-id="source_create" data-clipboard-action="copy"
                     data-clipboard-target="#q-source_create" href="javascript:void(0)">Copy</a></h3>
             <div class="card">
+                <a data-id="q-source_create" href="javascript:void(0)" class="apply" data-db="{{ $source }}">Apply</a>
                 <code id="q-source_create">
                     <?php
                     $qu3 = trim(rtrim(str_replace(';', ';<br>', $query['reverseCreate'])));
@@ -29,6 +35,7 @@
                     data-clipboard-target="#q-current_create" href="javascript:void(0)">Copy</a></h3>
             <div class="well">
                 <div class="card">
+                    <a data-id="q-current_create" href="javascript:void(0)" class="apply" data-db="{{ $current }}">Apply</a>
                     <code id="q-current_create">
                         <?php
                         $qu1 = trim(rtrim(str_replace(';', ';<br>', $query['currentCreate'])));
@@ -45,6 +52,7 @@
                     class="btn btn-info h5 cpy" data-id="source_update" data-clipboard-action="copy"
                     data-clipboard-target="#q-source_update" href="javascript:void(0)">Copy</a></h3>
             <div class="card">
+                <a data-id="q-source_update" href="javascript:void(0)" class="apply" data-db="{{ $source }}">Apply</a>
                 <code id="q-source_update">
                     <?php
                     $qu4 = trim(rtrim(str_replace(';', ';<br>', $query['reverseUpdate'])));
@@ -60,6 +68,7 @@
                     class="btn btn-info h5 cpy" data-clipboard-action="copy" data-clipboard-target="#q-current_updates"
                     href="javascript:void(0)" data-id="current_updates">Copy</a></h3>
             <div class="card">
+                <a data-id="q-current_updates" href="javascript:void(0)" class="apply" data-db="{{ $current }}">Apply</a>
                 <code id="q-current_updates">
                     <?php
                     $qu2 = trim(rtrim(str_replace(';', ';<br>', $query['currentUpdate'])));
@@ -135,7 +144,7 @@
                             data-clipboard-target="#q-dismatch_query" href="javascript:void(0)">Copy</a>
                     </td>
                     <td>
-
+                        <a data-id="q-dismatch_query" href="javascript:void(0)" class="apply" data-db="{{ $source }}">Apply</a>
                     <code id="q-dismatch_query">
                         <?php
                         $qu5 = trim(rtrim(str_replace(';', ';<br>', $query['updateSource'])));
@@ -155,6 +164,7 @@
                         $qu6 = trim(rtrim(str_replace(';', ';<br>', $query['updateCurrent'])));
                     ?>
                     <td>
+                        <a data-id="q-rev_dismatch_query" href="javascript:void(0)" class="apply" data-db="{{ $current }}">Apply</a>
                         <code id="q-rev_dismatch_query">
                         {!! $query['misCurrent'] == true ? $qu6 : '<center class="text-center text-muted h5">No Changes</center>'  !!}
                         </code>
