@@ -226,21 +226,21 @@ class CompareChainer
 
         if (array_key_exists('auto-update', $data['source'])) {
             self::setConnection($data['source']);
-            if(in_array(request('datatype-update'), ['source', 'current'] ) && request('datatype-update') == 'source'){
+            if (in_array(request('datatype-update'), ['source', 'current']) && request('datatype-update') == 'source') {
                 $sourceQueries .= $query['updateSource'];
             }
             $sourceQueries = trim(rtrim($sourceQueries));
-            if(strlen($sourceQueries)){
+            if (strlen($sourceQueries)) {
                 \DB::unprepared($sourceQueries);
             }
         }
         if (array_key_exists('auto-update', $data['current'])) {
             self::setConnection($data['current']);
-            if(in_array(request('datatype-update'), ['source', 'current'] ) && request('datatype-update') == 'current'){
+            if (in_array(request('datatype-update'), ['source', 'current']) && request('datatype-update') == 'current') {
                 $currentQueries .= $query['updateCurrent'];
             }
             $currentQueries = trim(rtrim($currentQueries));
-            if(strlen($currentQueries)){
+            if (strlen($currentQueries)) {
                 \DB::unprepared($currentQueries);
             }
         }
@@ -262,6 +262,9 @@ class CompareChainer
         foreach ($columnsData as $col) {
             $columnSource = self::prepareColumnData($col['source']);
             $columnCurrent = self::prepareColumnData($col['current']);
+
+            $columnSource->nullString = '';
+            $columnCurrent->nullString = '';
             $querySource .= 'ALTER TABLE `' . $table . '` CHANGE `' . $columnSource->field . '` `' . $columnCurrent->field . '` ' . $columnCurrent->type . ' ' . $columnCurrent->nullString . ';';
             $queryCurrent .= 'ALTER TABLE `' . $table . '` CHANGE `' . $columnSource->field . '` `' . $columnSource->field . '` ' . $columnSource->type . ' ' . $columnSource->nullString . ';';
         }
@@ -288,12 +291,14 @@ class CompareChainer
         $data = [];
         self::setConnection($connection);
 
-        $tables = \DB::select('SHOW TABLES');
+        $tables = \DB::select("SHOW FULL TABLES where Table_Type = 'BASE TABLE'");
+      
         if (isset($tables)) {
             foreach ($tables as $table) {
                 $data[$type . '_tables'][] = collect(array_values((array)$table))->first();
             }
         }
+      
         if (sizeof($data) == 0) {
             $data[$type . '_tables'] = [];
         }
@@ -535,8 +540,9 @@ class CompareChainer
         $array = sizeof($columns) ? collect($columns) : collect();
         $query = '';
         if (isset($array)) {
-            foreach ($array as $column) {
+            foreach ($array as$k => $column) {
                 $column = self::prepareColumnData($column);
+//                if($k > 1)dd($column);
                 $query .= " `$column->field` $column->type $column->extraString $column->nullString $column->defaultString $column->keyString,";
             }
         }
@@ -554,8 +560,28 @@ class CompareChainer
         $Default = $column->Default;
         $Extra = $column->Extra;
 
-        $nullString = (strtolower($Null) == 'no') ? 'NOT NULL' : 'NULL DEFAULT NULL';
-        $defaultString = !is_null($Default) ? 'DEFAULT ' . $Default : '';
+        $nullString = (strtolower($Null) == 'no') ? ' NOT NULL ' : 'NULL ';
+
+        $defaultTo = request('default-update'); // [ no, null, string ]
+        if (in_array($defaultTo, ['string'])) {
+            $nullString = ' NOT NULL ';
+        }
+
+        if (in_array($defaultTo, ['null', 'string'])) {
+            $Default = ($defaultTo == 'null') ? ' NULL ' : " '' ";
+            $nullString = ($defaultTo == 'null') ? str_replace('NOT NULL', ' NULL ', $nullString) : $nullString;
+        }
+
+        if(strtolower($Key) == 'pri'){
+            $Default = ' NOT NULL ';
+            $nullString = '';
+        }
+
+        $defaultString = !is_null($Default) ? ' DEFAULT ' . $Default : '';
+        if(strtolower($Key) == 'pri'){
+            $defaultString = str_replace('DEFAULT', '', $defaultString);
+        }
+
         $extraString = (strlen($Extra) && strtolower($Extra) == 'auto_increment') ? ' AUTO_INCREMENT ' : '';
         $keyString = '';
         if (strtolower($Key) == 'pri') {
