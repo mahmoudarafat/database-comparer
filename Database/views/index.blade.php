@@ -64,6 +64,28 @@
                     </td>
                 </tr>
 
+
+                <tr>
+                    <td colspan="3" id="default-values">
+                        <h6 class="text-danger">What to do with columns without default values</h6>
+                        <ul class="list-unstyled" style="display: flex">
+                            <li style="padding-right: 30px;"><b>Update to:</b></li>
+                            <li style="display: contents;" id="no-default-update-div">
+                                <label for="no-default-update" class="col-sm-3">Don't Update:
+                                    <input  type="radio" id="no-default-update" name="default-update" checked value="no" /></label>
+                            </li>
+                            <li style="    display: contents;" id="source-datatype-update-div">
+                                <label for="null-default-update" class="col-sm-3">Update To <b>NULL</b>:
+                                    <input  type="radio" id="null-default-update" name="default-update" value="null" /></label>
+                            </li>
+                            <li style="display: contents;" id="string-default-update-div">
+                                <label for="string-default-update" class="col-sm-3">Update to <b>Empty String</b>:
+                                    <input  type="radio" id="string-default-update" name="default-update" value="string" /></label>
+                            </li>
+                        </ul>
+                    </td>
+                </tr>
+
                 </tbody>
             </table>
         </form>

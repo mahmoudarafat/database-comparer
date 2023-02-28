@@ -16,7 +16,7 @@ class Comparable{
     {
         $this->compareResults = $compareResults;
     }
-
+    
     public function listTables()
     {
         $data = $this->compareResults;
