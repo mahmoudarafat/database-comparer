@@ -578,6 +578,11 @@ class CompareChainer
         }
 
         $defaultString = !is_null($Default) ? ' DEFAULT ' . $Default : '';
+        
+        if(is_string($Default)){
+            $defaultString = !is_null($Default) ? "DEFAULT '$Default' "  : '';
+        }
+
         if(strtolower($Key) == 'pri'){
             $defaultString = str_replace('DEFAULT', '', $defaultString);
         }
