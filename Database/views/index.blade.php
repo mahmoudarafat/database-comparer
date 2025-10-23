@@ -29,10 +29,10 @@
                                 <label>Database: </label><input required name="{{ $item }}[db]" class="form-control" value="" />
                             </li>
                             <li>
-                                <label>Username: </label><input required name="{{ $item }}[user]" class="form-control" value="root" />
+                                <label>Username: </label><input required name="{{ $item }}[user]" class="form-control" value="homestead" />
                             </li>
                             <li>
-                                <label>Password: </label><input name="{{ $item }}[pass]" class="form-control" value="" />
+                                <label>Password: </label><input name="{{ $item }}[pass]" class="form-control" value="secret" />
                             </li>
                             <li class="row" style="margin-top: 10px;">
                                 <label for="{{ $item }}-auto" class="col-sm-6">Auto Update Tables:</label>
