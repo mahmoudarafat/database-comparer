@@ -4,6 +4,8 @@ namespace App\Services\Database;
 
 use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\File;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Artisan;
 
 class CompareChainer
 {
@@ -198,7 +200,10 @@ class CompareChainer
             $autoupdate = true;
         }
 
-        $view = view('Comparer::result', compact('query', 'db', 'changedColumns', 'sourceDB', 'currentDB', 'autoupdate'))->render();
+        // Generate separate migration files for each operation type
+        $migrations = self::generateMigrations($data, $query, $db);
+        
+        $view = view('Comparer::result', compact('query', 'db', 'changedColumns', 'sourceDB', 'currentDB', 'autoupdate', 'migrations'))->render();
         /*********************************** OR *****************************************/
         // view()->addLocation(base_path('app/Services/Database/views'));
         // $view = view('result', compact('query'))->render();
@@ -292,13 +297,13 @@ class CompareChainer
         self::setConnection($connection);
 
         $tables = \DB::select("SHOW FULL TABLES where Table_Type = 'BASE TABLE'");
-      
+
         if (isset($tables)) {
             foreach ($tables as $table) {
                 $data[$type . '_tables'][] = collect(array_values((array)$table))->first();
             }
         }
-      
+
         if (sizeof($data) == 0) {
             $data[$type . '_tables'] = [];
         }
@@ -540,10 +545,13 @@ class CompareChainer
         $array = sizeof($columns) ? collect($columns) : collect();
         $query = '';
         if (isset($array)) {
-            foreach ($array as$k => $column) {
+            foreach ($array as $k => $column) {
                 $column = self::prepareColumnData($column);
-//                if($k > 1)dd($column);
                 $query .= " `$column->field` $column->type $column->extraString $column->nullString $column->defaultString $column->keyString,";
+                if ($table == 'companies') {
+//                    dd($column, $query);
+                }
+
             }
         }
 
@@ -572,18 +580,21 @@ class CompareChainer
             $nullString = ($defaultTo == 'null') ? str_replace('NOT NULL', ' NULL ', $nullString) : $nullString;
         }
 
-        if(strtolower($Key) == 'pri'){
-            $Default = ' NOT NULL ';
-            $nullString = '';
+        if (strtolower($Key) == 'pri') {
+            $Default = '';
+            $nullString = ' NOT NULL ';
         }
 
         $defaultString = !is_null($Default) ? ' DEFAULT ' . $Default : '';
-        
-        if(is_string($Default)){
-            $defaultString = !is_null($Default) ? "DEFAULT '$Default' "  : '';
-        }
 
-        if(strtolower($Key) == 'pri'){
+        if (is_string($Default) && strtolower($Key) != 'pri') {
+            if (!in_array($Default, ['NULL', 'None', 'CURRENT_TIMESTAMP'])) {
+                $defaultString = !is_null($Default) ? "DEFAULT '$Default' " : '';
+            } else {
+                $defaultString = !is_null($Default) ? "DEFAULT $Default " : '';
+            }
+        }
+        if (strtolower($Key) == 'pri') {
             $defaultString = str_replace('DEFAULT', '', $defaultString);
         }
 
@@ -645,6 +656,624 @@ class CompareChainer
         $type = collect($type);
         $type = $type->keyBy('Field');
         return $type->get($column->field);
+    }
+
+    /**
+     * Generate separate Laravel migration files for each operation type
+     */
+    public static function generateMigrations($data, $query, $db)
+    {
+        $timestamp = date('Y_m_d_His');
+        $migrations = [];
+        
+        $sourceDbName = $db['source'];
+        $currentDbName = $db['current'];
+        
+        // Generate migration for creating new tables
+        if (!empty($query['currentCreate'])) {
+            $migrations['create_tables'] = self::generateCreateTablesMigration($query['currentCreate'], $timestamp, 'current', $sourceDbName, $currentDbName);
+        }
+        
+        // Generate migration for adding new columns
+        if (!empty($query['currentUpdate'])) {
+            $migrations['add_columns'] = self::generateAddColumnsMigration($query['currentUpdate'], $timestamp, 'current', $sourceDbName, $currentDbName);
+        }
+        
+        // Generate migration for changing column types (current DB)
+        if (!empty($query['updateCurrent'])) {
+            $migrations['change_columns'] = self::generateChangeColumnsMigration($query['updateCurrent'], $timestamp, 'current', $sourceDbName, $currentDbName);
+        }
+        
+        // Generate migration for changing column types (source DB)
+        if (!empty($query['updateSource'])) {
+            $migrations['change_reverse_columns'] = self::generateChangeColumnsMigration($query['updateSource'], $timestamp, 'source', $sourceDbName, $currentDbName);
+        }
+        
+        // Generate migration for creating reverse tables (tables in current but not in source)
+        if (!empty($query['reverseCreate'])) {
+            $migrations['create_reverse_tables'] = self::generateCreateTablesMigration($query['reverseCreate'], $timestamp, 'reverse', $sourceDbName, $currentDbName);
+        }
+        
+        // Generate migration for adding reverse columns
+        if (!empty($query['reverseUpdate'])) {
+            $migrations['add_reverse_columns'] = self::generateAddColumnsMigration($query['reverseUpdate'], $timestamp, 'reverse', $sourceDbName, $currentDbName);
+        }
+        
+        return $migrations;
+    }
+
+    /**
+     * Generate migration for creating tables
+     */
+    private static function generateCreateTablesMigration($queries, $timestamp, $type = 'current', $sourceDbName = '', $currentDbName = '')
+    {
+        $migrationName = $type === 'reverse' ? 
+            "create_reverse_tables_{$timestamp}" : 
+            "create_tables_{$timestamp}";
+            
+        $content = self::buildCreateTablesMigrationContent($queries, $migrationName);
+        
+        $description = '';
+        if ($type === 'reverse') {
+            $description = "Create tables from {$currentDbName} in {$sourceDbName}";
+        } else {
+            $description = "Create new tables from {$sourceDbName} in {$currentDbName}";
+        }
+        
+        return [
+            'filename' => $migrationName . '.php',
+            'content' => $content,
+            'type' => $type === 'reverse' ? 'create_reverse_tables' : 'create_tables',
+            'description' => $description
+        ];
+    }
+
+    /**
+     * Generate migration for adding columns
+     */
+    private static function generateAddColumnsMigration($queries, $timestamp, $type = 'current', $sourceDbName = '', $currentDbName = '')
+    {
+        $migrationName = $type === 'reverse' ? 
+            "add_reverse_columns_{$timestamp}" : 
+            "add_columns_{$timestamp}";
+            
+        $content = self::buildAddColumnsMigrationContent($queries, $migrationName);
+        
+        $description = '';
+        if ($type === 'reverse') {
+            $description = "Add columns from {$currentDbName} to {$sourceDbName}";
+        } else {
+            $description = "Add new columns from {$sourceDbName} to {$currentDbName}";
+        }
+        
+        return [
+            'filename' => $migrationName . '.php',
+            'content' => $content,
+            'type' => 'add_columns',
+            'description' => $description
+        ];
+    }
+
+    /**
+     * Generate migration for changing column types
+     */
+    private static function generateChangeColumnsMigration($queries, $timestamp, $type = 'current', $sourceDbName = '', $currentDbName = '')
+    {
+        $migrationName = $type === 'source' ? 
+            "change_reverse_columns_{$timestamp}" : 
+            "change_columns_{$timestamp}";
+            
+        $content = self::buildChangeColumnsMigrationContent($queries, $migrationName);
+        
+        $description = '';
+        if ($type === 'source') {
+            $description = "Change column data types in {$sourceDbName} to match {$currentDbName}";
+        } else {
+            $description = "Change column data types in {$currentDbName} to match {$sourceDbName}";
+        }
+        
+        return [
+            'filename' => $migrationName . '.php',
+            'content' => $content,
+            'type' => $type === 'source' ? 'change_reverse_columns' : 'change_columns',
+            'description' => $description
+        ];
+    }
+
+    /**
+     * Build migration content for creating tables
+     */
+    private static function buildCreateTablesMigrationContent($queries, $migrationName)
+    {
+        $className = self::getMigrationClassName($migrationName);
+        
+        $content = "<?php\n\n";
+        $content .= "use Illuminate\\Database\\Migrations\\Migration;\n";
+        $content .= "use Illuminate\\Database\\Schema\\Blueprint;\n";
+        $content .= "use Illuminate\\Support\\Facades\\Schema;\n\n";
+        $content .= "return new class extends Migration\n";
+        $content .= "{\n";
+        $content .= "    /**\n";
+        $content .= "     * Run the migrations.\n";
+        $content .= "     */\n";
+        $content .= "    public function up(): void\n";
+        $content .= "    {\n";
+        $content .= self::formatQueriesForMigration($queries, 'create');
+        $content .= "    }\n\n";
+        $content .= "    /**\n";
+        $content .= "     * Reverse the migrations.\n";
+        $content .= "     */\n";
+        $content .= "    public function down(): void\n";
+        $content .= "    {\n";
+        $content .= self::formatQueriesForMigration($queries, 'drop');
+        $content .= "    }\n";
+        $content .= "};\n";
+        
+        return $content;
+    }
+
+    /**
+     * Build migration content for adding columns
+     */
+    private static function buildAddColumnsMigrationContent($queries, $migrationName)
+    {
+        $className = self::getMigrationClassName($migrationName);
+        
+        $content = "<?php\n\n";
+        $content .= "use Illuminate\\Database\\Migrations\\Migration;\n";
+        $content .= "use Illuminate\\Database\\Schema\\Blueprint;\n";
+        $content .= "use Illuminate\\Support\\Facades\\Schema;\n\n";
+        $content .= "return new class extends Migration\n";
+        $content .= "{\n";
+        $content .= "    /**\n";
+        $content .= "     * Run the migrations.\n";
+        $content .= "     */\n";
+        $content .= "    public function up(): void\n";
+        $content .= "    {\n";
+        $content .= self::formatQueriesForMigration($queries, 'update');
+        $content .= "    }\n\n";
+        $content .= "    /**\n";
+        $content .= "     * Reverse the migrations.\n";
+        $content .= "     */\n";
+        $content .= "    public function down(): void\n";
+        $content .= "    {\n";
+        $content .= self::formatQueriesForMigration($queries, 'remove');
+        $content .= "    }\n";
+        $content .= "};\n";
+        
+        return $content;
+    }
+
+    /**
+     * Build migration content for changing columns
+     */
+    private static function buildChangeColumnsMigrationContent($queries, $migrationName)
+    {
+        $className = self::getMigrationClassName($migrationName);
+        
+        $content = "<?php\n\n";
+        $content .= "use Illuminate\\Database\\Migrations\\Migration;\n";
+        $content .= "use Illuminate\\Database\\Schema\\Blueprint;\n";
+        $content .= "use Illuminate\\Support\\Facades\\Schema;\n\n";
+        $content .= "return new class extends Migration\n";
+        $content .= "{\n";
+        $content .= "    /**\n";
+        $content .= "     * Run the migrations.\n";
+        $content .= "     */\n";
+        $content .= "    public function up(): void\n";
+        $content .= "    {\n";
+        $content .= self::formatQueriesForMigration($queries, 'change');
+        $content .= "    }\n\n";
+        $content .= "    /**\n";
+        $content .= "     * Reverse the migrations.\n";
+        $content .= "     */\n";
+        $content .= "    public function down(): void\n";
+        $content .= "    {\n";
+        $content .= "        // Note: Column type changes are not easily reversible\n";
+        $content .= "        // You may need to manually specify the reverse changes\n";
+        $content .= "    }\n";
+        $content .= "};\n";
+        
+        return $content;
+    }
+
+    /**
+     * Build the migration file content
+     */
+    private static function buildMigrationContent($data, $query, $migrationName)
+    {
+        $className = self::getMigrationClassName($migrationName);
+        
+        $content = "<?php\n\n";
+        $content .= "use Illuminate\\Database\\Migrations\\Migration;\n";
+        $content .= "use Illuminate\\Database\\Schema\\Blueprint;\n";
+        $content .= "use Illuminate\\Support\\Facades\\Schema;\n\n";
+        $content .= "return new class extends Migration\n";
+        $content .= "{\n";
+        $content .= "    /**\n";
+        $content .= "     * Run the migrations.\n";
+        $content .= "     */\n";
+        $content .= "    public function up(): void\n";
+        $content .= "    {\n";
+        
+        // Add table creation queries
+        if (!empty($query['currentCreate'])) {
+            $content .= "        // Create new tables\n";
+            $content .= self::formatQueriesForMigration($query['currentCreate'], 'create');
+        }
+        
+        // Add table update queries (new columns)
+        if (!empty($query['currentUpdate'])) {
+            $content .= "        // Add new columns to existing tables\n";
+            $content .= self::formatQueriesForMigration($query['currentUpdate'], 'update');
+        }
+        
+        // Add column type changes
+        if (!empty($query['updateCurrent'])) {
+            $content .= "        // Update column data types\n";
+            $content .= self::formatQueriesForMigration($query['updateCurrent'], 'change');
+        }
+        
+        $content .= "    }\n\n";
+        $content .= "    /**\n";
+        $content .= "     * Reverse the migrations.\n";
+        $content .= "     */\n";
+        $content .= "    public function down(): void\n";
+        $content .= "    {\n";
+        
+        // Add rollback queries
+        if (!empty($query['reverseCreate'])) {
+            $content .= "        // Drop tables created in up()\n";
+            $content .= self::formatQueriesForMigration($query['reverseCreate'], 'drop');
+        }
+        
+        if (!empty($query['reverseUpdate'])) {
+            $content .= "        // Remove columns added in up()\n";
+            $content .= self::formatQueriesForMigration($query['reverseUpdate'], 'remove');
+        }
+        
+        $content .= "    }\n";
+        $content .= "};\n";
+        
+        return $content;
+    }
+
+    /**
+     * Format SQL queries for Laravel migration format
+     */
+    private static function formatQueriesForMigration($queries, $type)
+    {
+        $formatted = '';
+        $queries = trim($queries);
+        
+        if (empty($queries)) {
+            return $formatted;
+        }
+        
+        // Remove transaction statements
+        $queries = str_replace(['START TRANSACTION;', 'COMMIT;', 'SET sql_mode = \'\';'], '', $queries);
+        $queries = trim($queries);
+        
+        // Split by semicolon and process each query
+        $queryArray = array_filter(explode(';', $queries));
+        
+        foreach ($queryArray as $query) {
+            $query = trim($query);
+            if (empty($query)) continue;
+            
+            switch ($type) {
+                case 'create':
+                    $formatted .= self::formatCreateTableQuery($query);
+                    break;
+                case 'update':
+                    $formatted .= self::formatAlterTableQuery($query);
+                    break;
+                case 'change':
+                    $formatted .= self::formatChangeColumnQuery($query);
+                    break;
+                case 'drop':
+                    $formatted .= self::formatDropTableQuery($query);
+                    break;
+                case 'remove':
+                    $formatted .= self::formatRemoveColumnQuery($query);
+                    break;
+            }
+        }
+        
+        return $formatted;
+    }
+
+    /**
+     * Format CREATE TABLE query for migration
+     */
+    private static function formatCreateTableQuery($query)
+    {
+        // Extract table name
+        preg_match('/CREATE TABLE `([^`]+)`/', $query, $matches);
+        if (!isset($matches[1])) return '';
+        
+        $tableName = $matches[1];
+        
+        $formatted = "        Schema::create('{$tableName}', function (Blueprint \$table) {\n";
+        
+        // Extract column definitions
+        preg_match('/CREATE TABLE `[^`]+` \((.*)\)/', $query, $matches);
+        if (!isset($matches[1])) return $formatted . "        });\n\n";
+        
+        $columns = $matches[1];
+        $columnDefinitions = explode(',', $columns);
+        
+        foreach ($columnDefinitions as $column) {
+            $column = trim($column);
+            if (empty($column)) continue;
+            
+            // Skip PRIMARY KEY, UNIQUE, KEY definitions for now
+            if (strpos($column, 'PRIMARY KEY') !== false || 
+                strpos($column, 'UNIQUE') !== false || 
+                strpos($column, 'KEY') !== false) {
+                continue;
+            }
+            
+            $formatted .= self::parseColumnDefinition($column);
+        }
+        
+        $formatted .= "        });\n\n";
+        return $formatted;
+    }
+
+    /**
+     * Format ALTER TABLE query for migration
+     */
+    private static function formatAlterTableQuery($query)
+    {
+        // Extract table name and column definition
+        preg_match('/ALTER TABLE\s+(\w+)\s+ADD COLUMN\s+`([^`]+)`\s+(.+)/', $query, $matches);
+        if (!isset($matches[1])) return '';
+        
+        $tableName = $matches[1];
+        $columnName = $matches[2];
+        $columnDef = $matches[3];
+        
+        $formatted = "        Schema::table('{$tableName}', function (Blueprint \$table) {\n";
+        $formatted .= self::parseColumnDefinition("`{$columnName}` {$columnDef}");
+        $formatted .= "        });\n\n";
+        
+        return $formatted;
+    }
+
+    /**
+     * Format CHANGE COLUMN query for migration
+     */
+    private static function formatChangeColumnQuery($query)
+    {
+        preg_match('/ALTER TABLE `([^`]+)` CHANGE `([^`]+)` `([^`]+)`\s+(.+)/', $query, $matches);
+        if (!isset($matches[1])) return '';
+        
+        $tableName = $matches[1];
+        $oldColumnName = $matches[2];
+        $newColumnName = $matches[3];
+        $columnDef = $matches[4];
+        
+        $formatted = "        Schema::table('{$tableName}', function (Blueprint \$table) {\n";
+        $formatted .= "            \$table->change('{$oldColumnName}', ";
+        $formatted .= self::parseColumnDefinitionForChange("`{$newColumnName}` {$columnDef}");
+        $formatted .= "        });\n\n";
+        
+        return $formatted;
+    }
+
+    /**
+     * Format DROP TABLE query for migration
+     */
+    private static function formatDropTableQuery($query)
+    {
+        preg_match('/CREATE TABLE `([^`]+)`/', $query, $matches);
+        if (!isset($matches[1])) return '';
+        
+        $tableName = $matches[1];
+        return "        Schema::dropIfExists('{$tableName}');\n\n";
+    }
+
+    /**
+     * Format REMOVE COLUMN query for migration
+     */
+    private static function formatRemoveColumnQuery($query)
+    {
+        preg_match('/ALTER TABLE\s+(\w+)\s+ADD COLUMN\s+`([^`]+)`/', $query, $matches);
+        if (!isset($matches[1])) return '';
+        
+        $tableName = $matches[1];
+        $columnName = $matches[2];
+        
+        $formatted = "        Schema::table('{$tableName}', function (Blueprint \$table) {\n";
+        $formatted .= "            \$table->dropColumn('{$columnName}');\n";
+        $formatted .= "        });\n\n";
+        
+        return $formatted;
+    }
+
+    /**
+     * Parse column definition for change() method (returns only the column type method)
+     */
+    private static function parseColumnDefinitionForChange($columnDef)
+    {
+        // Extract column name
+        preg_match('/`([^`]+)`/', $columnDef, $matches);
+        if (!isset($matches[1])) return '';
+        
+        $columnName = $matches[1];
+        
+        // Extract data type
+        preg_match('/`[^`]+`\s+(\w+)/', $columnDef, $matches);
+        if (!isset($matches[1])) return '';
+        
+        $dataType = strtolower($matches[1]);
+        
+        // Extract additional properties
+        $nullable = strpos($columnDef, 'NOT NULL') === false;
+        $autoIncrement = strpos($columnDef, 'AUTO_INCREMENT') !== false;
+        
+        // Convert to Laravel migration format for change() method
+        switch ($dataType) {
+            case 'int':
+            case 'integer':
+                $formatted = "\$table->integer('{$columnName}')";
+                break;
+            case 'bigint':
+                $formatted = "\$table->bigInteger('{$columnName}')";
+                break;
+            case 'varchar':
+                preg_match('/varchar\((\d+)\)/', $columnDef, $matches);
+                $length = isset($matches[1]) ? $matches[1] : 255;
+                $formatted = "\$table->string('{$columnName}', {$length})";
+                break;
+            case 'text':
+                $formatted = "\$table->text('{$columnName}')";
+                break;
+            case 'timestamp':
+                $formatted = "\$table->timestamp('{$columnName}')";
+                break;
+            case 'datetime':
+                $formatted = "\$table->datetime('{$columnName}')";
+                break;
+            case 'date':
+                $formatted = "\$table->date('{$columnName}')";
+                break;
+            case 'time':
+                $formatted = "\$table->time('{$columnName}')";
+                break;
+            case 'decimal':
+                preg_match('/decimal\((\d+),(\d+)\)/', $columnDef, $matches);
+                $precision = isset($matches[1]) ? $matches[1] : 8;
+                $scale = isset($matches[2]) ? $matches[2] : 2;
+                $formatted = "\$table->decimal('{$columnName}', {$precision}, {$scale})";
+                break;
+            case 'float':
+                $formatted = "\$table->float('{$columnName}')";
+                break;
+            case 'boolean':
+            case 'tinyint':
+                $formatted = "\$table->boolean('{$columnName}')";
+                break;
+            default:
+                $formatted = "\$table->string('{$columnName}')";
+        }
+        
+        // Add modifiers
+        if (!$nullable) {
+            $formatted .= "->nullable(false)";
+        }
+        
+        if ($autoIncrement) {
+            $formatted .= "->autoIncrement()";
+        }
+        
+        $formatted .= ");\n";
+        
+        return $formatted;
+    }
+
+    /**
+     * Parse column definition and convert to Laravel migration format
+     */
+    private static function parseColumnDefinition($columnDef, $isChange = false)
+    {
+        $formatted = "            ";
+        
+        // Extract column name
+        preg_match('/`([^`]+)`/', $columnDef, $matches);
+        if (!isset($matches[1])) return '';
+        
+        $columnName = $matches[1];
+        
+        // Extract data type
+        preg_match('/`[^`]+`\s+(\w+)/', $columnDef, $matches);
+        if (!isset($matches[1])) return '';
+        
+        $dataType = strtolower($matches[1]);
+        
+        // Extract additional properties
+        $nullable = strpos($columnDef, 'NOT NULL') === false;
+        $autoIncrement = strpos($columnDef, 'AUTO_INCREMENT') !== false;
+        $primaryKey = strpos($columnDef, 'PRIMARY KEY') !== false;
+        
+        // Convert to Laravel migration format
+        switch ($dataType) {
+            case 'int':
+            case 'integer':
+                $formatted .= "\$table->integer('{$columnName}')";
+                break;
+            case 'bigint':
+                $formatted .= "\$table->bigInteger('{$columnName}')";
+                break;
+            case 'varchar':
+                preg_match('/varchar\((\d+)\)/', $columnDef, $matches);
+                $length = isset($matches[1]) ? $matches[1] : 255;
+                $formatted .= "\$table->string('{$columnName}', {$length})";
+                break;
+            case 'text':
+                $formatted .= "\$table->text('{$columnName}')";
+                break;
+            case 'timestamp':
+                $formatted .= "\$table->timestamp('{$columnName}')";
+                break;
+            case 'datetime':
+                $formatted .= "\$table->datetime('{$columnName}')";
+                break;
+            case 'date':
+                $formatted .= "\$table->date('{$columnName}')";
+                break;
+            case 'time':
+                $formatted .= "\$table->time('{$columnName}')";
+                break;
+            case 'decimal':
+                preg_match('/decimal\((\d+),(\d+)\)/', $columnDef, $matches);
+                $precision = isset($matches[1]) ? $matches[1] : 8;
+                $scale = isset($matches[2]) ? $matches[2] : 2;
+                $formatted .= "\$table->decimal('{$columnName}', {$precision}, {$scale})";
+                break;
+            case 'float':
+                $formatted .= "\$table->float('{$columnName}')";
+                break;
+            case 'boolean':
+            case 'tinyint':
+                $formatted .= "\$table->boolean('{$columnName}')";
+                break;
+            default:
+                $formatted .= "\$table->string('{$columnName}')";
+        }
+        
+        // Add modifiers
+        if (!$nullable) {
+            $formatted .= "->nullable(false)";
+        }
+        
+        if ($autoIncrement) {
+            $formatted .= "->autoIncrement()";
+        }
+        
+        if ($primaryKey) {
+            $formatted .= "->primary()";
+        }
+        
+        $formatted .= ";\n";
+        
+        return $formatted;
+    }
+
+    /**
+     * Generate migration class name from filename
+     */
+    private static function getMigrationClassName($migrationName)
+    {
+        $parts = explode('_', $migrationName);
+        $className = '';
+        
+        foreach ($parts as $part) {
+            $className .= ucfirst($part);
+        }
+        
+        return $className;
     }
 
 }
