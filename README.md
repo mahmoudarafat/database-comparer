@@ -4,9 +4,6 @@
 2. New tables in second db
 3. New columns in existing tables in both dbs
 
-### to do
-1. Get datatype changes in columns
-
 ## how to use
 1. Add the Database folder to yoour laravel project in
 'app/Services' folder
