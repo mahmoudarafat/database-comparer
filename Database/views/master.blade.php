@@ -13,6 +13,10 @@
             overflow-y: scroll;
         }
 
+        .full-card{
+            height: auto !important;
+        }
+        
         .checkbox:focus {
             box-shadow: unset !important;
         }
@@ -143,6 +147,34 @@
         console.log(content);
         return false;
     })
+
+    // Download migration file functionality
+    $(document).on('click', '.download-migration', function () {
+        var filename = $(this).data('filename');
+        var encodedContent = $(this).data('content');
+        
+        // Decode the base64 encoded content
+        var content = atob(encodedContent);
+        
+        // Create a blob with the migration content
+        var blob = new Blob([content], { type: 'text/plain' });
+        
+        // Create a temporary URL for the blob
+        var url = window.URL.createObjectURL(blob);
+        
+        // Create a temporary anchor element to trigger download
+        var a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        
+        // Clean up
+        document.body.removeChild(a);
+        window.URL.revokeObjectURL(url);
+        
+        return false;
+    });
 
 </script>
 </body>
