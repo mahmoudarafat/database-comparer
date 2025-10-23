@@ -27,7 +27,7 @@ Route::post('db-compare-apply', function () {
 2. click Apply for needed section.
 
 ## New in the latest Release:
-1. Migration file for each section with ability to copy the content or ownload a generated file.
+1. Migration file for each section with ability to copy the content or download a generated file.
 2. Ability to auto update default values.
 3. Ability to auto apply directly without manual confirm, just with sumit action.
 
