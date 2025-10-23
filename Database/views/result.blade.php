@@ -81,9 +81,9 @@
         <div class="col-sm-6">
             <br>
 
-            <h3 class="text-primary text-center">Changed Columns</h3>
+            <h3 class="text-center text-primary">Changed Columns</h3>
             <hr>
-            <table class="table table-bordered text-center">
+            <table class="table text-center table-bordered">
                 <thead>
                 <th>Table</th>
                 <th>Column</th>
@@ -128,7 +128,7 @@
 
         <div class="col-sm-6">
             <br>
-            <h3 class="text-info text-center">Changes Query</h3>
+            <h3 class="text-center text-info">Changes Query</h3>
             <hr>
             <table class="table table-bordered">
                 <thead>
@@ -175,6 +175,53 @@
                 </tbody>
 
             </table>
+        </div>
+    </div>
+
+    <!-- Migration Sections -->
+    <div class="row">
+        <div class="col-sm-12">
+            <br>
+            <h3 class="text-center text-success">Laravel Migration Files</h3>
+            <hr>
+            
+            @if(!empty($migrations))
+                @foreach($migrations as $key => $migration)
+                    <div class="mb-4 card" style="height:auto;">
+                        <div class="card-header">
+                            <h5 class="mb-0">
+                                <span class="badge badge-primary">{{ ucwords(str_replace('_', ' ', $migration['type'])) }}</span>
+                                <code>{{ $migration['filename'] }}</code>
+                                <div class="float-right">
+                                    <a class="btn btn-success btn-sm cpy" 
+                                       data-id="migration_{{ $key }}" 
+                                       data-clipboard-action="copy"
+                                       data-clipboard-target="#migration-{{ $key }}" 
+                                       href="javascript:void(0)">
+                                        <i class="fa fa-copy"></i> Copy
+                                    </a>
+                                    <a class="btn btn-primary btn-sm download-migration" 
+                                       data-filename="{{ $migration['filename'] }}"
+                                       data-content="{{ base64_encode($migration['content']) }}"
+                                       href="javascript:void(0)">
+                                        <i class="fa fa-download"></i> Download
+                                    </a>
+                                </div>
+                            </h5>
+                            <small class="text-muted">{{ $migration['description'] }}</small>
+                        </div>
+                        <div class="card-body">
+                            <pre id="migration-{{ $key }}" style="background-color: #f8f9fa; padding: 15px; border-radius: 5px;  overflow-y: auto;"><code>{{ $migration['content'] }}</code></pre>
+                        </div>
+                    </div>
+                @endforeach
+            @else
+                <div class="card">
+                    <div class="text-center card-body">
+                        <h5 class="text-muted">No migrations needed - databases are already in sync!</h5>
+                    </div>
+                </div>
+            @endif
         </div>
     </div>
 
